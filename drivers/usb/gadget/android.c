@@ -96,6 +96,7 @@
 #include "f_uac1.c"
 #endif
 #include "f_ncm.c"
+#include "f_charger.c"
 
 MODULE_AUTHOR("Mike Lockwood");
 MODULE_DESCRIPTION("Android Composite USB Driver");
@@ -466,7 +467,7 @@ static void ffs_function_cleanup(struct android_usb_function *f)
 
 static void ffs_function_enable(struct android_usb_function *f)
 {
-	struct android_dev *dev = _android_dev;
+	struct android_dev *dev = f->android_dev;
 	struct functionfs_config *config = f->config;
 
 	config->enabled = true;
@@ -478,7 +479,7 @@ static void ffs_function_enable(struct android_usb_function *f)
 
 static void ffs_function_disable(struct android_usb_function *f)
 {
-	struct android_dev *dev = _android_dev;
+	struct android_dev *dev = f->android_dev;
 	struct functionfs_config *config = f->config;
 
 	config->enabled = false;
@@ -501,6 +502,9 @@ ffs_aliases_show(struct device *pdev, struct device_attribute *attr, char *buf)
 	struct android_dev *dev = _android_dev;
 	int ret;
 
+	dev = list_first_entry(&android_dev_list, struct android_dev,
+			list_item);
+
 	mutex_lock(&dev->mutex);
 	ret = sprintf(buf, "%s\n", dev->ffs_aliases);
 	mutex_unlock(&dev->mutex);
@@ -514,6 +518,9 @@ ffs_aliases_store(struct device *pdev, struct device_attribute *attr,
 {
 	struct android_dev *dev = _android_dev;
 	char buff[256];
+
+	dev = list_first_entry(&android_dev_list, struct android_dev,
+			list_item);
 
 	mutex_lock(&dev->mutex);
 
@@ -549,7 +556,7 @@ static struct android_usb_function ffs_function = {
 
 static int functionfs_ready_callback(struct ffs_data *ffs)
 {
-	struct android_dev *dev = _android_dev;
+	struct android_dev *dev = ffs_function.android_dev;
 	struct functionfs_config *config = ffs_function.config;
 	int ret = 0;
 
@@ -572,7 +579,7 @@ err:
 
 static void functionfs_closed_callback(struct ffs_data *ffs)
 {
-	struct android_dev *dev = _android_dev;
+	struct android_dev *dev = ffs_function.android_dev;
 	struct functionfs_config *config = ffs_function.config;
 
 	mutex_lock(&dev->mutex);
@@ -1520,6 +1527,19 @@ static struct android_usb_function ccid_function = {
 	.bind_config	= ccid_function_bind_config,
 };
 
+/* Charger */
+static int charger_function_bind_config(struct android_usb_function *f,
+						struct usb_configuration *c)
+{
+	return charger_bind_config(c);
+}
+
+static struct android_usb_function charger_function = {
+	.name		= "charging",
+	.bind_config	= charger_function_bind_config,
+};
+
+
 static int
 mtp_function_init(struct android_usb_function *f,
 		struct usb_composite_dev *cdev)
@@ -2248,6 +2268,7 @@ static struct android_usb_function midi_function = {
 };
 #endif
 static struct android_usb_function *supported_functions[] = {
+	&ffs_function,
 	&mbim_function,
 	&ecm_qc_function,
 #ifdef CONFIG_SND_PCM
@@ -2280,6 +2301,7 @@ static struct android_usb_function *supported_functions[] = {
 #ifdef CONFIG_SND_RAWMIDI
 	&midi_function,
 #endif
+	&charger_function,
 	NULL
 };
 
@@ -2588,38 +2610,51 @@ functions_store(struct device *pdev, struct device_attribute *attr,
 	b = strim(buf);
 
 	while (b) {
-		name = strsep(&b, ",");
-		if (!name)
+		conf_str = strsep(&b, ":");
+		if (!conf_str)
 			continue;
 
-		is_ffs = 0;
-		strlcpy(aliases, dev->ffs_aliases, sizeof(aliases));
-		a = aliases;
+		/* If the next not equal to the head, take it */
+		if (curr_conf->next != &dev->configs)
+			conf = list_entry(curr_conf->next,
+					  struct android_configuration,
+					  list_item);
+		else
+			conf = alloc_android_config(dev);
 
-		while (a) {
-			char *alias = strsep(&a, ",");
-			if (alias && !strcmp(name, alias)) {
-				is_ffs = 1;
-				break;
+		curr_conf = curr_conf->next;
+
+		while (conf_str) {
+			name = strsep(&conf_str, ",");
+
+			is_ffs = 0;
+			strlcpy(aliases, dev->ffs_aliases, sizeof(aliases));
+			a = aliases;
+
+			while (a) {
+				char *alias = strsep(&a, ",");
+				if (alias && !strcmp(name, alias)) {
+					is_ffs = 1;
+					break;
+				}
 			}
-		}
 
-		if (is_ffs) {
-			if (ffs_enabled)
+			if (is_ffs) {
+				if (ffs_enabled)
+					continue;
+				err = android_enable_function(dev, conf, "ffs");
+				if (err)
+					pr_err("android_usb: Cannot enable ffs (%d)",
+										err);
+				else
+					ffs_enabled = 1;
 				continue;
-			err = android_enable_function(dev, "ffs");
+			}
+			err = android_enable_function(dev, conf, name);
 			if (err)
-				pr_err("android_usb: Cannot enable ffs (%d)",
-									err);
-			else
-				ffs_enabled = 1;
-			continue;
+				pr_err("android_usb: Cannot enable '%s' (%d)",
+						name, err);
 		}
-
-		err = android_enable_function(dev, name);
-		if (err)
-			pr_err("android_usb: Cannot enable '%s' (%d)",
-							   name, err);
 	}
 
 	mutex_unlock(&dev->mutex);
