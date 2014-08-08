@@ -556,23 +556,6 @@ static void credit_entropy_bits(struct entropy_store *r, int nbits)
 		entropy_count = r->poolinfo->POOLBITS;
 	r->entropy_count = entropy_count;
 
-	if (cmpxchg(&r->entropy_count, orig, entropy_count) != orig)
-		goto retry;
-
-	r->entropy_total += nbits;
-	if (!r->initialized && r->entropy_total > 128) {
-		r->initialized = 1;
-		r->entropy_total = 0;
-		if (r == &nonblocking_pool) {
-			prandom_reseed_late();
-			wake_up_interruptible(&urandom_init_wait);
-			pr_notice("random: %s pool is initialized\n", r->name);
-		}
-	}
-
-	trace_credit_entropy_bits(r->name, nbits, entropy_count,
-				  r->entropy_total, _RET_IP_);
-
 	/* should we wake readers? */
 	if (r == &input_pool && entropy_count >= random_read_wakeup_thresh) {
 		wake_up_interruptible(&random_read_wait);
@@ -888,7 +871,6 @@ static ssize_t extract_entropy(struct entropy_store *r, void *buf,
 	__u8 tmp[EXTRACT_SIZE];
 	unsigned long flags;
 
-	trace_extract_entropy(r->name, nbytes, r->entropy_count, _RET_IP_);
 	xfer_secondary_pool(r, nbytes);
 	nbytes = account(r, nbytes, min, reserved);
 
@@ -1249,14 +1231,6 @@ SYSCALL_DEFINE3(getrandom, char __user *, buf, size_t, count,
 	if (flags & GRND_RANDOM)
 		return _random_read(flags & GRND_NONBLOCK, buf, count);
 
-	if (unlikely(nonblocking_pool.initialized == 0)) {
-		if (flags & GRND_NONBLOCK)
-			return -EAGAIN;
-		wait_event_interruptible(urandom_init_wait,
-					 nonblocking_pool.initialized);
-		if (signal_pending(current))
-			return -ERESTARTSYS;
-	}
 	return urandom_read(NULL, buf, count, NULL);
 }
 
