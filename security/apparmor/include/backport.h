@@ -65,4 +65,7 @@ static inline int cap_mmap_addr(unsigned long addr)
 #define file_open dentry_open
 #define apparmor_file_open apparmor_dentry_open
 
+/* 3.12 backport emulate commit b18825a7c8e37a7cf6abb97a12a6ad71af160de7 */
+#define d_is_positive(D) ((D)->d_inode)
+
 #endif /* __AA_BACKPORT_H */
