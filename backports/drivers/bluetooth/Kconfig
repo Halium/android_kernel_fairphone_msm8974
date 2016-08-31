@@ -264,6 +264,17 @@ config BACKPORT_BT_HCIBTUART
 	  Say Y here to compile support for HCI UART devices into the
 	  kernel or say M to compile it as module (btuart_cs).
 
+config BACKPORT_BT_HCISMD
+	tristate "HCI SMD driver"
+	help
+	  Bluetooth HCI SMD driver
+	  This driver is required if you want to use Bluetooth devices with
+	  a shared memory interface.
+
+	  Say Y here to compile support for Bluetooth SMD devices into the
+	  kernel or say M to compile it as module (hci_smd).
+
+
 config BACKPORT_BT_HCIVHCI
 	tristate "HCI VHCI (Virtual HCI device) driver"
 	depends on !BT_HCIVHCI
