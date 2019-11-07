@@ -766,20 +766,8 @@ int aa_change_profile(const char *ns_name, const char *hname, bool onexec,
 	 * no_new_privs is set because this aways results in a reduction
 	 * of permissions.
 	 */
-	if (current->no_new_privs && !unconfined(label)) {
+	if (task_no_new_privs(current) && !unconfined(label)) {
 		aa_put_label(label);
-		put_cred(cred);
-		return -EPERM;
-	}
-
-	/*
-	 * Fail explicitly requested domain transitions if no_new_privs
-	 * and not unconfined.
-	 * Domain transitions from unconfined are allowed even when
-	 * no_new_privs is set because this aways results in a reduction
-	 * of permissions.
-	 */
-	if (task_no_new_privs(current) && !unconfined(profile)) {
 		put_cred(cred);
 		return -EPERM;
 	}
