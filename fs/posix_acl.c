@@ -359,7 +359,7 @@ int posix_acl_update_mode(struct inode *inode, umode_t *mode_p,
 	umode_t mode = inode->i_mode;
 	int error;
 
-	error = posix_acl_update_mode(inode, &inode->i_mode, acl);
+	error = posix_acl_equiv_mode(*acl, &mode);
 	if (error)
 		return error;
 	if (!in_group_p(inode->i_gid) &&
