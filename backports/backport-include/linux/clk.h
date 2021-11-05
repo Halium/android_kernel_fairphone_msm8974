@@ -16,25 +16,6 @@
 
 #ifndef CONFIG_COMMON_CLK
 
-/*
- * Whoopsie!
- *
- * clk_enable() and clk_disable() have been left without
- * a nop export symbols when !CONFIG_COMMON_CLK since its
- * introduction on v2.6.16, but fixed until 3.6.
- */
-#if 0
-#define clk_enable LINUX_BACKPORT(clk_enable)
-static inline int clk_enable(struct clk *clk)
-{
-	return 0;
-}
-
-#define clk_disable LINUX_BACKPORT(clk_disable)
-static inline void clk_disable(struct clk *clk) {}
-#endif
-
-
 #define clk_get LINUX_BACKPORT(clk_get)
 static inline struct clk *clk_get(struct device *dev, const char *id)
 {
